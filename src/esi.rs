@@ -370,7 +370,7 @@ async fn get_text_retry(url: String) -> Result<String, EsiError> {
             Err(e) => {
                 if retry_attempts > 0 {
                     retry_attempts -= 1;
-                    let retry_delay = (11 - retry_attempts) * 100;
+                    let retry_delay = (11 - retry_attempts) * 200;
                     warn!(
                         "Got error {:?} while fetching {}, retrying in at least {}ms ({} attempts remain)",
                         e, &url, retry_delay, retry_attempts

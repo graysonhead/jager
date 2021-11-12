@@ -17,7 +17,7 @@ async fn main() {
     info!("Establishing connection");
     let db = establish_connection().await.unwrap();
     let now: NaiveDate = Utc::today().naive_utc();
-    let dates = zkill::get_dates(now, 4);
+    let dates = zkill::get_dates(now, 90);
     let requests = zkill::get_history_records(dates).await;
     let mut pb = ProgressBar::new(requests.len().try_into().unwrap());
     println!("Fetching {} killmails", requests.len());

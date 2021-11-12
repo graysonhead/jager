@@ -3,18 +3,27 @@ extern crate rocket;
 use jager::database;
 use jager::stats_processing;
 use rocket::http::{ContentType, Status};
-use rocket::response::Response;
+use rocket::request::Request;
+use rocket::response::{Responder, Response};
 use rocket::serde::json::Json;
 use serde::Serialize;
+use std::error::Error;
 
-#[derive(Serialize)]
-struct SrdError {
-    err: String,
+#[derive(Serialize, Debug)]
+pub struct ErrorMessage {
+    message: String,
 }
 
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
+}
+
+#[catch(404)]
+fn not_found(_req: &Request) -> Json<ErrorMessage> {
+    Json(ErrorMessage {
+        message: "The resource you were looking for doesn't exist".to_string(),
+    })
 }
 
 #[get("/character_stats/<character_name>")]
@@ -35,6 +44,7 @@ async fn get_character_stats(
 #[launch]
 fn rocket() -> _ {
     rocket::build()
+        .register("/", catchers![not_found])
         .mount("/", routes![index])
         .mount("/", routes![get_character_stats])
 }

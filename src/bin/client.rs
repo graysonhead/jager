@@ -12,6 +12,7 @@ use druid::{
 use futures::{stream, StreamExt};
 use jager::stats_processing::CharacterStats;
 use reqwest;
+use reqwest::Response;
 use std::boxed::Box;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -29,6 +30,7 @@ pub struct Character {
     pub name: String,
     pub valid: bool,
     pub in_progress: bool,
+    pub is_found: bool,
     pub stats: Option<CharacterStats>,
 }
 
@@ -72,6 +74,8 @@ fn make_list_item() -> impl Widget<Character> {
                     "Loading".to_string()
                 } else if !d.valid {
                     "Error".to_string()
+                } else if !d.is_found {
+                    "Not Found".to_string()
                 } else {
                     "".to_string()
                 }
@@ -128,6 +132,7 @@ fn get_characters_from_clipboard(clipboard: &String) -> Vector<Character> {
             name: name.to_string().clone(),
             valid: true,
             in_progress: true,
+            is_found: true,
             stats: None,
         })
         .collect();
@@ -138,42 +143,84 @@ fn get_character_stats_url(name: &str) -> String {
     format!("{}/character_stats/{}", JAGER_URL, name)
 }
 
+async fn deserialize_stats_result(character: Character, response: Response) -> Character {
+    let stats_result = response.json::<CharacterStats>().await;
+    match stats_result {
+        Ok(stats) => {
+            info!("Fetched character info for {}", character.name);
+            Character {
+                name: character.name,
+                valid: true,
+                in_progress: false,
+                is_found: true,
+                stats: Some(stats),
+            }
+        }
+        Err(e) => {
+            error!(
+                "Character deserialize failed for {}: {:?}",
+                character.name, e
+            );
+            Character {
+                name: character.name,
+                valid: false,
+                in_progress: false,
+                is_found: true,
+                stats: None,
+            }
+        }
+    }
+}
+
 async fn get_character_stats(character: Character) -> Character {
     let request_url = get_character_stats_url(&character.name);
     info!("Sending request to {}", request_url);
     match reqwest::get(request_url).await {
-        Ok(response) => {
-            let stats_result = response.json::<CharacterStats>().await;
-            match stats_result {
-                Ok(stats) => {
-                    info!("Fetched character info for {}", character.name);
-                    Character {
-                        name: character.name,
-                        valid: true,
-                        in_progress: false,
-                        stats: Some(stats),
+        Ok(response) => match response.error_for_status() {
+            Ok(message) => deserialize_stats_result(character, message).await,
+            Err(e) => {
+                if let Some(code) = e.status() {
+                    match code {
+                        reqwest::StatusCode::NOT_FOUND => Character {
+                            name: character.name,
+                            valid: true,
+                            in_progress: false,
+                            is_found: false,
+                            stats: None,
+                        },
+                        _ => {
+                            error!(
+                                "Got {} from server while processing {}",
+                                code, character.name
+                            );
+                            Character {
+                                name: character.name,
+                                valid: false,
+                                in_progress: false,
+                                is_found: true,
+                                stats: None,
+                            }
+                        }
                     }
-                }
-                Err(e) => {
-                    error!(
-                        "Character deserialize failed for {}: {:?}",
-                        character.name, e
-                    );
+                } else {
+                    error!("Unknown error occured processing {}", character.name);
                     Character {
                         name: character.name,
                         valid: false,
                         in_progress: false,
+                        is_found: true,
                         stats: None,
                     }
                 }
             }
-        }
+        },
         Err(e) => {
             error!("Cannot fetch character {}: {:?}", character.name, e);
             Character {
                 name: character.name,
                 valid: false,
                 in_progress: false,
+                is_found: true,
                 stats: None,
             }
         }
@@ -265,10 +312,10 @@ impl AppDelegate<AppState> for Delegate {
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
-    let clip_contents = ctx.get_contents().unwrap();
-    println!("Contents: {}", clip_contents);
-    let characters = get_characters_from_clipboard(&clip_contents);
+    // let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+    // let clip_contents = ctx.get_contents().unwrap();
+    // println!("Contents: {}", clip_contents);
+    let characters = Vector::new();
     let initial_state: AppState = AppState { characters };
     let window = WindowDesc::new(build_root_widget)
         .window_size((400.0, 800.0))
