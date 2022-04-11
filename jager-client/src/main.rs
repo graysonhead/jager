@@ -3,27 +3,53 @@ extern crate log;
 
 use clipboard::ClipboardContext;
 use clipboard::ClipboardProvider;
-use druid::im::Vector;
-use druid::widget::{Button, CrossAxisAlignment, Flex, Label, LineBreaking, List, Scroll};
+use druid::im::{vector, Vector};
+use druid::widget::{CrossAxisAlignment, Flex, Label, List, Scroll};
 use druid::{
-    AppDelegate, AppLauncher, Color, Command, Data, DelegateCtx, Env, Handled, Lens,
-    LocalizedString, RenderContext, Selector, SingleUse, Target, Widget, WidgetExt, WindowDesc,
+    AppDelegate, AppLauncher, Color, Command, Data, DelegateCtx, Env, Handled, Lens, Selector,
+    Target, Widget, WidgetExt, WindowDesc,
 };
 use futures::{stream, StreamExt};
-use jager::stats_processing::CharacterStats;
-use reqwest;
 use reqwest::Response;
-use std::boxed::Box;
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-const PROPERTIES: &[(&str, f64)] = &[("Name", 200.0), ("KDR", 100.0), ("Info", 200.0)];
+const PROPERTIES: &[(&str, f64)] = &[
+    ("Name", 200.0),
+    ("KDR", 40.0),
+    ("Solo KDR", 40.0),
+    ("Alliance", 80.0),
+    ("Corporation", 80.0),
+    ("Info", 200.0),
+];
 const HEADER_BACKGROUND: Color = Color::grey8(0xCC);
 const JAGER_URL: &str = "http://localhost:8000";
 
 const CLEAR: Selector = Selector::new("CLEAR");
 const NEW_CHARACTERS: Selector<Vector<Character>> = Selector::new("NEW_CHARACTERS");
 const CHARACTER_UPDATE: Selector<Character> = Selector::new("CHARACTER_UPDATE");
+
+#[derive(Debug, Serialize, Deserialize, Clone, Data)]
+pub struct KillLossRatio {
+    pub kills: usize,
+    pub losses: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Data)]
+pub struct CharInfo {
+    pub alliance_name: Option<String>,
+    pub alliance_ticker: Option<String>,
+    pub corporation_name: Option<String>,
+    pub corporation_ticker: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Data)]
+pub struct CharacterStats {
+    pub char_info: CharInfo,
+    pub kill_loss_ratio: KillLossRatio,
+    pub solo_kill_loss_ratio: KillLossRatio,
+}
 
 #[derive(Clone, Data, Lens, Debug)]
 pub struct Character {
@@ -43,6 +69,14 @@ impl Character {
 #[derive(Clone, Data, Lens, Debug)]
 pub struct AppState {
     pub characters: Vector<Character>,
+    pub columns: Vector<ColumnState>,
+}
+
+#[derive(Clone, Data, Lens, Debug)]
+pub struct ColumnState {
+    pub name: String,
+    pub width: f64,
+    pub enabled: bool,
 }
 
 fn make_list_item() -> impl Widget<Character> {
@@ -67,6 +101,52 @@ fn make_list_item() -> impl Widget<Character> {
             .with_text_color(Color::BLACK)
             .fix_width(PROPERTIES[1].1),
         )
+        .with_child(
+            Label::dynamic(|d: &Character, _| {
+                if let Some(stats) = &d.stats {
+                    format!(
+                        "{}:{}",
+                        stats.solo_kill_loss_ratio.kills, stats.solo_kill_loss_ratio.losses
+                    )
+                } else {
+                    "".to_string()
+                }
+            })
+            .with_text_color(Color::BLACK)
+            .fix_width(PROPERTIES[2].1),
+        )
+        .with_default_spacer()
+        .with_child(
+            Label::dynamic(|d: &Character, _| {
+                if let Some(stats) = &d.stats {
+                    if let Some(alliance_ticker) = &stats.char_info.alliance_ticker {
+                        alliance_ticker.clone()
+                    } else {
+                        "".to_string()
+                    }
+                } else {
+                    "".to_string()
+                }
+            })
+            .with_text_color(Color::BLACK)
+            .fix_width(PROPERTIES[3].1),
+        )
+        .with_default_spacer()
+        .with_child(
+            Label::dynamic(|d: &Character, _| {
+                if let Some(stats) = &d.stats {
+                    if let Some(corporation_ticker) = &stats.char_info.corporation_ticker {
+                        corporation_ticker.clone()
+                    } else {
+                        "".to_string()
+                    }
+                } else {
+                    "".to_string()
+                }
+            })
+            .with_text_color(Color::BLACK)
+            .fix_width(PROPERTIES[4].1),
+        )
         .with_default_spacer()
         .with_child(
             Label::dynamic(|d: &Character, _| {
@@ -75,16 +155,29 @@ fn make_list_item() -> impl Widget<Character> {
                 } else if !d.valid {
                     "Error".to_string()
                 } else if !d.is_found {
-                    "Not Found".to_string()
+                    "No History".to_string()
                 } else {
                     "".to_string()
                 }
             })
             .with_text_color(Color::RED)
-            .fix_width(PROPERTIES[2].1),
+            .fix_width(PROPERTIES[5].1),
         )
         .with_default_spacer()
 }
+
+fn get_header_item() -> impl Widget<ColumnState> {
+    Label::dynamic(|d: &ColumnState, _| format!("{}", &d.name))
+        .with_text_color(Color::BLACK)
+        .fix_width(100.)
+        .background(HEADER_BACKGROUND)
+}
+
+// fn get_table_header() -> impl Widget<SettingsState> {
+//     Flex::row()
+//         .with_default_spacer()
+//         .with_flex_child(List::new(get_header_item).lens(AppState::columns), 1.0)
+// }
 
 fn ui_character_list() -> impl Widget<AppState> {
     let mut header = Flex::row().with_child(
@@ -258,7 +351,7 @@ async fn clipboard_watcher(event_sink: druid::ExtEventSink) {
             event_sink
                 .submit_command(NEW_CHARACTERS, characters, Target::Auto)
                 .unwrap();
-            // Set up channel to receive character stats on asynchronously
+            // Set up channel to receive character stats asynchronously
             let (tx, mut rx): (UnboundedSender<Character>, UnboundedReceiver<Character>) =
                 unbounded_channel();
             // Start fetching character stats
@@ -290,7 +383,7 @@ impl AppDelegate<AppState> for Delegate {
             return Handled::Yes;
         }
         if let Some(character) = cmd.get(CHARACTER_UPDATE) {
-            let mut iter_clone = data.characters.clone();
+            let iter_clone = data.characters.clone();
             let mut char_list = data.characters.clone();
             if let Some(char_index) = iter_clone
                 .into_iter()
@@ -312,16 +405,38 @@ impl AppDelegate<AppState> for Delegate {
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    // let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
-    // let clip_contents = ctx.get_contents().unwrap();
-    // println!("Contents: {}", clip_contents);
     let characters = Vector::new();
-    let initial_state: AppState = AppState { characters };
+    let columns = vector![
+        ColumnState {
+            name: "Name".to_string(),
+            width: 100.0,
+            enabled: true
+        },
+        ColumnState {
+            name: "KDR".to_string(),
+            width: 100.0,
+            enabled: true
+        },
+        ColumnState {
+            name: "SKDR".to_string(),
+            width: 100.0,
+            enabled: false
+        },
+        ColumnState {
+            name: "INFO".to_string(),
+            width: 100.0,
+            enabled: true
+        }
+    ];
+    let initial_state: AppState = AppState {
+        characters,
+        columns,
+    };
     let window = WindowDesc::new(build_root_widget)
         .window_size((400.0, 800.0))
         .title("Jager");
     let launcher = AppLauncher::with_window(window).delegate(Delegate {});
     let event_sink = launcher.get_external_handle();
     tokio::task::spawn(async move { clipboard_watcher(event_sink).await });
-    launcher.launch(initial_state);
+    launcher.launch(initial_state).unwrap();
 }
