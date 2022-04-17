@@ -2689,7 +2689,8 @@ dependencies = [
 [[package]]
 name = "sea-orm-rocket"
 version = "0.5.0"
-source = "git+https://github.com/SeaQL/sea-orm#738f73c4bc5fa01aa29594eee2cb9b9927b27e87"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29427b7598f825f6640f608bc4d134e39994a6c4812b2225e33d8b2c6e10a14f"
 dependencies = [
  "rocket",
  "sea-orm-rocket-codegen",
@@ -2698,7 +2699,8 @@ dependencies = [
 [[package]]
 name = "sea-orm-rocket-codegen"
 version = "0.5.0"
-source = "git+https://github.com/SeaQL/sea-orm#738f73c4bc5fa01aa29594eee2cb9b9927b27e87"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bfd750adb2541f30b855e2d86e90bf7031ac17e048ac5226a8e8c8d8a6022f2"
 dependencies = [
  "devise",
  "quote",
