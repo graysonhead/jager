@@ -1,72 +1,38 @@
-# SPDX-FileCopyrightText: 2021 Serokell <https://serokell.io/>
-#
-# SPDX-License-Identifier: CC0-1.0
-
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs";
-    crate2nix = {
-      url = "github:kolloch/crate2nix";
-      flake = false;
-    };
+    cargo2nix.url = "github:cargo2nix/cargo2nix/master";
     flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
+    rust-overlay.inputs.flake-utils.follows = "flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, crate2nix, flake-utils }:
+   outputs = { self, nixpkgs, cargo2nix, flake-utils, rust-overlay, ... }:
+
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [(import "${cargo2nix}/overlay")
+                      rust-overlay.overlay];
+        };
 
-        crateName = "jager";
+        rustPkgs = pkgs.rustBuilder.makePackageSet' {
+          rustChannel = "1.60.0";
+          packageFun = import ./Cargo.nix;
+        };
 
-        inherit (import "${crate2nix}/tools.nix" { inherit pkgs; })
-          generatedCargoNix;
+        workspaceShell = rustPkgs.workspaceShell {};
 
-        project = import (generatedCargoNix {
-          name = crateName;
-          src = ./.;
-        }) {
-          inherit pkgs;
-          defaultCrateOverrides = pkgs.defaultCrateOverrides // {
-              cairo-sys-rs = _: {
-                  nativeBuildInputs = [ pkgs.pkg-config pkgs.cairo ];
-              };
-              gobject-sys = _: {
-                  nativeBuildInputs = [ pkgs.pkg-config pkgs.gobject-introspection ];
-              };
-              atk-sys = _: {
-                  nativeBuildInputs = [ pkgs.pkg-config pkgs.atk ];
-              };
-              gio-sys = _: {
-                  nativeBuildInputs = [ pkgs.pkg-config pkgs.haskellPackages.gi-gio ];
-              };
-              gdk-pixbuf-sys = _: {
-                  nativeBuildInputs = [ pkgs.pkg-config pkgs.gdk-pixbuf ];
-              };
-              pango-sys = _: {
-                  nativeBuildInputs = [ pkgs.pkg-config pkgs.pango ];
-              };
-              gdk-sys = _: {
-                  nativeBuildInputs = [ pkgs.pkg-config pkgs.gtk3 ];
-              };
-              gtk-sys = _: {
-                  nativeBuildInputs = [ pkgs.pkg-config pkgs.gtk3 ];
-              };
-              jager-client = _: {
-                  buildInputs = [ pkgs.zlib pkgs.xorg.libxcb ];
-              };
+        #Output set
+        in rec {
+          packages = {
+            jager-client = (rustPkgs.workspace.jager-client {}).bin;
+            jager-backend = (rustPkgs.workspace.backend {}).bin;
           };
-        };
-
-      in {
-        packages.${crateName} = project.workspaceMembers.backend.build;
-        packages.jager-client = project.workspaceMembers.jager-client.build;
-
-        defaultPackage = self.packages.${system}.jager-client;
-
-        devShell = pkgs.mkShell {
-          inputsFrom = builtins.attrValues self.packages.${system};
-          buildInputs = [ pkgs.cargo pkgs.rust-analyzer pkgs.clippy ];
-        };
-      });
+        devShell = workspaceShell;
+        defaultPackage = packages.jager-client;
+        }
+    );
 }
