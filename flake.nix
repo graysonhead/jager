@@ -27,6 +27,7 @@
         # Temporary workaround, see https://github.com/cargo2nix/cargo2nix/issues/238
         workspaceShell = pkgs.mkShell {
           packages = with pkgs; [
+            python3
             openssl.dev
             pkg-config
             cairo
