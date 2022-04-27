@@ -23,7 +23,26 @@
           packageFun = import ./Cargo.nix;
         };
 
-        workspaceShell = rustPkgs.workspaceShell {};
+        # workspaceShell = rustPkgs.workspaceShell {};
+        # Temporary workaround, see https://github.com/cargo2nix/cargo2nix/issues/238
+        workspaceShell = pkgs.mkShell {
+          packages = with pkgs; [
+            openssl.dev
+            pkg-config
+            cairo
+            gobject-introspection
+            atk
+            gdk-pixbuf
+            pango
+            gtk3
+            zlib
+            xorg.libxcb
+            cargo
+            cargo-watch
+            rustc
+            rust-analyzer
+          ];
+        };
 
         #Output set
         in rec {
