@@ -6,13 +6,13 @@ use sea_orm::{
     DatabaseConnection, DbErr, EntityTrait, IntoActiveModel, Value,
 };
 use sea_orm_rocket::Database as SODatabase;
-use sea_orm_rocket::rocket::figment::Figment;
+use sea_orm_rocket::{rocket::figment::Figment, Config};
 use std::env;
 use std::fmt;
 use tokio::time::{sleep, Duration};
 
 #[derive(SODatabase, Debug)]
-#[database("sea_orm")]
+#[database("jager")]
 pub struct Db(SeaOrmPool);
 
 #[derive(Debug, Clone)]
@@ -26,10 +26,10 @@ impl sea_orm_rocket::Pool for SeaOrmPool {
 
     type Connection = sea_orm::DatabaseConnection;
 
-    async fn init(_figment: &Figment) -> Result<Self, Self::Error> {
+    async fn init(figment: &Figment) -> Result<Self, Self::Error> {
         dotenv().ok();
-        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not found.");
-        let mut opt = ConnectOptions::new(database_url.to_owned());
+        let config = figment.extract::<Config>().unwrap();
+        let mut opt = ConnectOptions::new(config.url);
         opt.max_connections(100)
             .min_connections(10)
             .connect_timeout(Duration::from_secs(8))

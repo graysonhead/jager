@@ -1,10 +1,19 @@
 use crate::stats_processing::CharacterStats;
+use bb8_redis::bb8::PooledConnection;
+use bb8_redis::{
+    bb8,
+    RedisConnectionManager,
+};
 use dotenv::dotenv;
-use redis::ErrorKind;
+use redis::{ErrorKind};
 use serde_json;
 use std::env;
-
 const EXPIRE_INTERVAL: usize = 14400;
+
+pub async fn get_redis_pool(url: String) -> bb8_redis::bb8::Pool<RedisConnectionManager> {
+    let manager = RedisConnectionManager::new(url).unwrap();
+    bb8::Pool::builder().build(manager).await.unwrap()
+}
 
 pub async fn init_redis_connection() -> Option<redis::aio::Connection> {
     dotenv().ok();
@@ -33,26 +42,26 @@ async fn get_redis_client(url: String) -> redis::aio::Connection {
         .expect("Failed to get async connection to redis")
 }
 
-pub async fn check_cache_character_stats<T: redis::aio::ConnectionLike>(
-    conn: &mut T,
+pub async fn check_cache_character_stats(
+    mut conn: &mut PooledConnection<'_, RedisConnectionManager>,
     character_name: &String,
 ) -> Option<CharacterStats> {
     match redis::cmd("GET")
         .arg(character_name)
-        .query_async::<T, String>(conn)
+        .query_async::<redis::aio::Connection, String>(&mut conn)
         .await
     {
         Ok(result_string) => {
-            let stats: Result<CharacterStats, serde_json::Error> =
+            let stats_result: Result<CharacterStats, serde_json::Error> =
                 serde_json::from_str(&result_string);
-            match stats {
-                Ok(stats_object) => {
+            match stats_result {
+                Ok(stats) => {
                     info!("Cache hit for {}", character_name);
-                    Some(stats_object)
+                    Some(stats)
                 }
                 Err(e) => {
                     error!(
-                        "Could not deserialze cache result for {}: {:?}",
+                        "Could not deserialize cache result for {}: {:?}",
                         character_name, e
                     );
                     None
@@ -65,15 +74,15 @@ pub async fn check_cache_character_stats<T: redis::aio::ConnectionLike>(
                 None
             }
             _ => {
-                error!("Failed to query cache for {}: {:?}", character_name, e);
+                error!("Failed to query chache for {}: {:?}", character_name, e);
                 None
             }
         },
     }
 }
 
-pub async fn cache_character_stats<T: redis::aio::ConnectionLike>(
-    conn: &mut T,
+pub async fn cache_character_stats(
+    conn: &mut PooledConnection<'_, RedisConnectionManager>,
     character_name: &String,
     info_object: &CharacterStats,
 ) {
@@ -84,7 +93,7 @@ pub async fn cache_character_stats<T: redis::aio::ConnectionLike>(
                 .arg(json_string)
                 .arg("EX")
                 .arg(EXPIRE_INTERVAL)
-                .query_async::<T, String>(conn)
+                .query_async::<redis::aio::Connection, String>(conn)
                 .await
                 .unwrap();
             info!("Added stats to cache for {}", character_name);
