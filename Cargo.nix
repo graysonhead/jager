@@ -131,13 +131,6 @@ in
     src = fetchCratesIo { inherit name version; sha256 = "c5d78ce20460b82d3fa150275ed9d55e21064fc7951177baacf86a145c4a4b1f"; };
   });
   
-  "registry+https://github.com/rust-lang/crates.io-index".argparse."0.2.2" = overridableMkRustCrate (profileName: rec {
-    name = "argparse";
-    version = "0.2.2";
-    registry = "registry+https://github.com/rust-lang/crates.io-index";
-    src = fetchCratesIo { inherit name version; sha256 = "3f8ebf5827e4ac4fd5946560e6a99776ea73b596d80898f357007317a7141e47"; };
-  });
-  
   "registry+https://github.com/rust-lang/crates.io-index".arrayvec."0.5.2" = overridableMkRustCrate (profileName: rec {
     name = "arrayvec";
     version = "0.5.2";
@@ -277,7 +270,6 @@ in
     registry = "unknown";
     src = fetchCrateLocal (workspaceSrc + "/backend");
     dependencies = {
-      argparse = rustPackages."registry+https://github.com/rust-lang/crates.io-index".argparse."0.2.2" { inherit profileName; };
       async_trait = buildRustPackages."registry+https://github.com/rust-lang/crates.io-index".async-trait."0.1.51" { profileName = "__noProfile"; };
       bb8_redis = rustPackages."registry+https://github.com/rust-lang/crates.io-index".bb8-redis."0.11.0" { inherit profileName; };
       chrono = rustPackages."registry+https://github.com/rust-lang/crates.io-index".chrono."0.4.19" { inherit profileName; };
@@ -1935,8 +1927,8 @@ in
     dependencies = {
       cfg_if = rustPackages."registry+https://github.com/rust-lang/crates.io-index".cfg-if."1.0.0" { inherit profileName; };
       ${ if (rootFeatures' ? "jager" || rootFeatures' ? "jager-client") && (hostPlatform.config == "wasm32-unknown-emscripten" || hostPlatform.config == "wasm32-unknown-unknown" || hostPlatform.config == "asmjs-unknown-emscripten") then "js_sys" else null } = rustPackages."registry+https://github.com/rust-lang/crates.io-index".js-sys."0.3.55" { inherit profileName; };
-      ${ if (rootFeatures' ? "jager" || rootFeatures' ? "jager-client") && (hostPlatform.config == "wasm32-unknown-emscripten" || hostPlatform.config == "asmjs-unknown-emscripten" || hostPlatform.config == "wasm32-unknown-unknown") then "wasm_bindgen_rs" else null } = rustPackages."registry+https://github.com/rust-lang/crates.io-index".wasm-bindgen."0.2.78" { inherit profileName; };
-      ${ if (rootFeatures' ? "jager" || rootFeatures' ? "jager-client") && (hostPlatform.config == "asmjs-unknown-emscripten" || hostPlatform.config == "wasm32-unknown-emscripten" || hostPlatform.config == "wasm32-unknown-unknown") then "web_sys" else null } = rustPackages."registry+https://github.com/rust-lang/crates.io-index".web-sys."0.3.55" { inherit profileName; };
+      ${ if (rootFeatures' ? "jager" || rootFeatures' ? "jager-client") && (hostPlatform.config == "wasm32-unknown-unknown" || hostPlatform.config == "asmjs-unknown-emscripten" || hostPlatform.config == "wasm32-unknown-emscripten") then "wasm_bindgen_rs" else null } = rustPackages."registry+https://github.com/rust-lang/crates.io-index".wasm-bindgen."0.2.78" { inherit profileName; };
+      ${ if (rootFeatures' ? "jager" || rootFeatures' ? "jager-client") && (hostPlatform.config == "wasm32-unknown-unknown" || hostPlatform.config == "wasm32-unknown-emscripten" || hostPlatform.config == "asmjs-unknown-emscripten") then "web_sys" else null } = rustPackages."registry+https://github.com/rust-lang/crates.io-index".web-sys."0.3.55" { inherit profileName; };
     };
   });
   
